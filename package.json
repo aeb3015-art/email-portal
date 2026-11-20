@@ -1,0 +1,17 @@
+{
+  "name": "inbox-os",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "build": "npm run build -w @inbox-os/shared && npm run build -w @inbox-os/api && npm run build -w @inbox-os/web",
+    "dev:api": "npm run dev -w @inbox-os/api",
+    "dev:worker": "npm run dev:worker -w @inbox-os/api",
+    "dev:web": "npm run dev -w @inbox-os/web",
+    "migrate": "npm run migrate -w @inbox-os/api",
+    "seed": "npm run seed -w @inbox-os/api",
+    "test": "npm run test -w @inbox-os/api",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": { "node": ">=20" }
+}
