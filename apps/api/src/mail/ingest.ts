@@ -37,7 +37,7 @@ function addresses(a: AddressObject | AddressObject[] | undefined): { address: s
 }
 
 export function makeSnippet(text: string): string {
-  return text.replace(/^>.*$/gm, '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  return text.replace(/\[(https?|cid|mailto):[^\]]*\]/gi, '').replace(/^>.*$/gm, '').replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
 /**
