@@ -5,7 +5,12 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(4000),
   DATABASE_URL: z.string().min(1),
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  /** Max Postgres connections per process; keep small on serverless. */
+  PG_POOL_MAX: z.coerce.number().int().positive().default(process.env.VERCEL ? 3 : 20),
+  /** Optional. Without Redis (e.g. on Vercel) there is no worker: mail is synced on demand and by cron. */
+  REDIS_URL: z.string().optional(),
+  /** Bearer secret for GET /cron/sync (Vercel Cron sends it automatically when set). */
+  CRON_SECRET: z.string().optional(),
   /** Comma-separated list of "keyId:base64key" (32-byte keys). The first entry encrypts new data. */
   ENCRYPTION_KEYS: z.string().min(1),
   WEB_ORIGIN: z.string().default('http://localhost:3000'),

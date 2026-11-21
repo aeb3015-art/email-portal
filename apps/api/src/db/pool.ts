@@ -6,7 +6,7 @@ pg.types.setTypeParser(20, (v) => Number(v));
 
 export const pool = new pg.Pool({
   connectionString: config.DATABASE_URL,
-  max: 20,
+  max: config.PG_POOL_MAX,
   ssl: /sslmode=require/.test(config.DATABASE_URL) ? { rejectUnauthorized: false } : undefined,
 });
 

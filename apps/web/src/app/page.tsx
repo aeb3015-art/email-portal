@@ -56,7 +56,10 @@ function Inbox() {
 
   useEffect(() => {
     loadThreads().catch((e) => setError(e.message));
-    const t = setInterval(() => loadThreads().catch(() => undefined), 30_000);
+    // Ask the server to check for new mail (a no-op when a sync worker is running), then refresh.
+    const tick = () => api('/mailboxes/sync', { method: 'POST' }).catch(() => undefined).then(() => loadThreads()).catch(() => undefined);
+    tick();
+    const t = setInterval(tick, 60_000);
     return () => clearInterval(t);
   }, [loadThreads]);
 
@@ -148,6 +151,8 @@ function Inbox() {
   );
 }
 
+const agentConsent = { ok: false };
+
 function ThreadView({ threadId, mailboxes, onChanged }: { threadId: string; mailboxes: Mailbox[]; onChanged: () => void }) {
   const s = useSession();
   const [thread, setThread] = useState<ThreadRow | null>(null);
@@ -188,18 +193,18 @@ function ThreadView({ threadId, mailboxes, onChanged }: { threadId: string; mail
   const forward = () => setComposer({ mailboxId: thread.mailbox_id, subject: /^fwd?:/i.test(subj) ? subj : `Fwd: ${subj}`,
     text: `\n\n---------- Forwarded message ----------\nFrom: ${last.m.fromAddress}\nDate: ${new Date(last.sent_at).toLocaleString()}\nSubject: ${subj}\nTo: ${last.m.to.join(', ')}\n\n${last.m.text}` });
 
-  async function agentDraft() {
+  async function agentDraft(lend = false) {
     setAgentBusy(true); setAgentError('');
     try {
-      await api('/inbox/agent/draft', { body: { threadId, instruction: instruction || 'Draft an appropriate reply.' } });
+      await api('/inbox/agent/draft', { body: { threadId, instruction: instruction || 'Draft an appropriate reply.', ...(lend ? { privateKey: await toB64(s.privateKey!) } : {}) } });
       setInstruction('');
       await load(); onChanged();
     } catch (e) {
-      if (e instanceof ApiError && e.status === 423 && s.privateKey && s.org) {
-        // Unlock the server-side agent for 8 hours: the key is held in API memory only.
-        if (confirm('The agent needs temporary access to decrypt this workspace on the server (held in memory only, 8 hours). Unlock now?')) {
-          await api('/org/agent/unlock', { body: { organisationId: s.org.id, privateKey: await toB64(s.privateKey), ttlMinutes: 480 } });
-          setAgentBusy(false); return agentDraft();
+      if (e instanceof ApiError && e.status === 423 && s.privateKey && !lend) {
+        // The server has no key. Lend ours for this single request; it is used in memory and discarded.
+        if (agentConsent.ok || confirm('To draft, the agent needs to decrypt this thread on the server. Your key is sent for this request only and is never stored. Continue?')) {
+          agentConsent.ok = true;
+          setAgentBusy(false); return agentDraft(true);
         }
       }
       setAgentError((e as Error).message);
@@ -253,7 +258,7 @@ function ThreadView({ threadId, mailboxes, onChanged }: { threadId: string; mail
             <p className="small muted" style={{ margin: '4px 0 8px' }}>Type or dictate an instruction, e.g. “reply to Liana, ask about the Blue Card, keep it polite”.</p>
             <textarea rows={2} style={{ minHeight: 60 }} value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Instruction for the agent…" />
             <div className="row" style={{ marginTop: 8 }}>
-              <button className="btn primary" onClick={agentDraft} disabled={agentBusy}>{agentBusy ? 'Drafting…' : 'Draft with agent'}</button>
+              <button className="btn primary" onClick={() => agentDraft()} disabled={agentBusy}>{agentBusy ? 'Drafting…' : 'Draft with agent'}</button>
               <VoiceButton onText={(t) => setInstruction((p) => (p ? `${p} ${t}` : t))} />
               {agentError && <span className="error">{agentError}</span>}
             </div>

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd ../.. && npm ci",
+  "buildCommand": "cd ../.. && npm run build -w @inbox-os/shared && npm run build -w @inbox-os/api && cd apps/api && node dist/db/migrate.js",
+  "outputDirectory": "public",
+  "functions": { "api/index.js": { "maxDuration": 300, "includeFiles": "dist/**" } },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
+  "crons": [{ "path": "/cron/sync", "schedule": "0 5 * * *" }]
+}

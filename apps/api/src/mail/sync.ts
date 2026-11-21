@@ -39,6 +39,8 @@ export interface SyncDeps {
   onNewMessage?: OnNewMessage;
   backfillDays?: number;
   backfillMax?: number;
+  /** Epoch ms after which a pass stops early (serverless time budget). The cursor is saved, so the next pass resumes. */
+  deadline?: number;
 }
 
 /** Sync a single folder: handles UIDVALIDITY resets, initial backfill and incremental fetch. */
@@ -74,8 +76,9 @@ export async function syncFolder(client: ImapLike, mb: MailboxRow, plan: FolderP
   let count = 0;
   let maxUid = lastUid;
   const isBackfill = lastUid === 0;
-  for (let i = 0; i < uids.length; i += 50) {
-    const batch = uids.slice(i, i + 50);
+  for (let i = 0; i < uids.length; i += 25) {
+    if (deps.deadline && Date.now() > deps.deadline) break;
+    const batch = uids.slice(i, i + 25);
     for await (const msg of client.fetch(batch, { uid: true, source: true, flags: true }, { uid: true })) {
       if (!msg.source) continue;
       const parsed = await simpleParser(msg.source, { skipImageLinks: true, skipTextToHtml: true });
@@ -96,7 +99,7 @@ export async function syncFolder(client: ImapLike, mb: MailboxRow, plan: FolderP
   return count;
 }
 
-async function setState(mailboxId: string, state: string, error: string | null = null) {
+export async function setState(mailboxId: string, state: string, error: string | null = null) {
   await query(
     `UPDATE mailboxes SET sync_state = $2, sync_error = $3, last_synced_at = CASE WHEN $2 = 'idle' THEN now() ELSE last_synced_at END WHERE id = $1`,
     [mailboxId, state, error],

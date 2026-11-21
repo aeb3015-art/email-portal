@@ -174,6 +174,8 @@ export const sendSchema = z.object({
 export const voiceDraftSchema = z.object({
   threadId: uuid,
   instruction: z.string().trim().min(1).max(4000),
+  /** Optional org private key for this single request (hosts that cannot hold an unlocked key). */
+  privateKey: z.string().regex(/^[A-Za-z0-9_-]+$/).max(64).optional(),
 });
 
 /** The AI key is sealed client-side; the server can only use it while the org is unlocked. */

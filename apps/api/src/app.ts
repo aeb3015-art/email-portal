@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { pool } from './db/pool.js';
 import { HttpError } from './errors.js';
 import { logger } from './logger.js';
+import { enabledMailboxIds, syncMailboxes } from './mail/syncOnce.js';
 import { mcpRouter } from './mcp/server.js';
 import { authRouter } from './routes/auth.js';
 import { inboxRouter } from './routes/inbox.js';
@@ -27,6 +28,13 @@ export function createApp() {
     } catch {
       res.status(503).json({ ok: false });
     }
+  });
+
+  // Scheduled sync for deployments without a worker. Protected by CRON_SECRET.
+  app.get('/cron/sync', async (req, res) => {
+    if (!config.CRON_SECRET || req.headers.authorization !== `Bearer ${config.CRON_SECRET}`) return res.status(401).json({ error: 'unauthorized' });
+    const results = await syncMailboxes(await enabledMailboxIds(), { deadline: Date.now() + 240_000 });
+    res.json({ synced: results.filter((r) => r.status === 'synced').length, errors: results.filter((r) => r.status === 'error').length });
   });
 
   // MCP is called by Claude / other MCP clients, not by the browser: no CORS.

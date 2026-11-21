@@ -8,7 +8,8 @@ import { assertMailbox, assertWorkspace, requireAuth, requireRole } from '../aut
 import { decryptJson } from '../crypto.js';
 import { encryptCredentials, type MailboxCredentials } from '../mail/credentials.js';
 import { testConnection } from '../mail/transport.js';
-import { publishMailboxChange } from '../queue/index.js';
+import { hasRedis, publishMailboxChange } from '../queue/index.js';
+import { enabledMailboxIds, syncMailboxes } from '../mail/syncOnce.js';
 import { auth, h, parse } from './util.js';
 
 export const mailboxRouter = express.Router();
@@ -73,6 +74,14 @@ mailboxRouter.patch('/:id', requireRole('owner', 'admin'), h(async (req, res) =>
   await publishMailboxChange(id);
   await audit(auth(req).orgId, { type: 'user', userId: auth(req).userId }, 'mailbox.update', { workspaceId: b.workspaceId ?? mb.workspace_id, targetType: 'mailbox', targetId: id });
   res.json(await one(`SELECT ${PUBLIC_COLS} FROM mailboxes WHERE id = $1`, [id]));
+}));
+
+/** Sync now. With a worker running this is a nudge; without one (serverless) it does the sync inline. */
+mailboxRouter.post('/sync', h(async (req, res) => {
+  if (hasRedis()) return res.json({ mode: 'worker', results: [] });
+  const ids = await enabledMailboxIds(auth(req).orgId);
+  const results = await syncMailboxes(ids, { deadline: Date.now() + 50_000, minIntervalMs: 45_000 });
+  res.json({ mode: 'inline', results });
 }));
 
 mailboxRouter.post('/:id/resync', requireRole('owner', 'admin'), h(async (req, res) => {

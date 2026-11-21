@@ -37,6 +37,7 @@ async function reconcile(mailboxId?: string) {
 }
 
 async function main() {
+  if (!config.REDIS_URL) throw new Error('The sync worker needs REDIS_URL');
   await migrate();
   const sub = redis();
   await sub.subscribe(MAILBOX_CHANNEL);

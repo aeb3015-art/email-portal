@@ -1,12 +1,12 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { draftCreateSchema, draftUpdateSchema, outgoingSchema, sendSchema, threadListQuerySchema, voiceDraftSchema } from '@inbox-os/shared';
+import { fromB64, publicKeyFromPrivate, draftCreateSchema, draftUpdateSchema, outgoingSchema, sendSchema, threadListQuerySchema, voiceDraftSchema } from '@inbox-os/shared';
 import { z } from 'zod';
 import { audit } from '../audit.js';
 import { one, query } from '../db/pool.js';
 import { HttpError, notFound } from '../errors.js';
 import { assertMailbox, requireAuth } from '../auth/middleware.js';
-import { orgCrypto } from '../keyvault.js';
+import { OrgCrypto, orgCrypto } from '../keyvault.js';
 import { draftReply } from '../agent/drafter.js';
 import { approveAndSend, createDraft, getDraft, listPending, rejectDraft, updateDraft } from '../services/drafts.js';
 import { sendViaMailbox } from '../services/send.js';
@@ -135,7 +135,13 @@ const agentLimiter = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: '
 
 inboxRouter.post('/agent/draft', agentLimiter, h(async (req, res) => {
   const b = parse(voiceDraftSchema, req.body);
-  const crypto = await orgCrypto(auth(req).orgId);
+  let crypto = await orgCrypto(auth(req).orgId);
+  if (!crypto.canDecrypt && b.privateKey) {
+    // Stateless hosts can't keep an unlocked key in memory, so the browser may lend it for this one request.
+    const key = await fromB64(b.privateKey);
+    if ((await publicKeyFromPrivate(key)) !== crypto.publicKey) throw new HttpError(403, 'Key does not match this organisation', 'forbidden');
+    crypto = new OrgCrypto(auth(req).orgId, crypto.publicKey, key);
+  }
   const r = await draftReply({ orgId: auth(req).orgId, threadId: b.threadId, instruction: b.instruction, crypto, actor: { type: 'agent', userId: auth(req).userId }, origin: 'agent' });
   res.status(201).json(r);
 }));
