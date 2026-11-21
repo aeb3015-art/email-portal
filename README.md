@@ -102,7 +102,7 @@ Prepend a new key, for example `ENCRYPTION_KEYS=k2:NEW,k1:OLD`. New credentials 
 
 ## Adding a mailbox
 
-**Settings → Mailboxes → Connect a mailbox.** Pick the workspace and then one of:
+**Settings → Mailboxes → Add account.** Pick your provider (iCloud, Microsoft Outlook, Google, Yahoo, AOL or Other), then enter only your email and password. Inbox OS finds the server settings itself. For a custom domain choose **Other**; if the server cannot be found automatically, the manual fields below appear:
 
 ### IMAP + SMTP (example: Assura or another cPanel / DirectAdmin host)
 

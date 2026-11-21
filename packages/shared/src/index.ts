@@ -115,6 +115,16 @@ export const mailboxCreateSchema = z.object({
   config: imapConfigSchema,
 });
 
+/** Phone-style connect: the server works out the mail server settings. */
+export const quickConnectSchema = z.object({
+  workspaceId: uuid,
+  emailAddress,
+  password: z.string().min(1).max(500),
+  provider: z.enum(['icloud', 'google', 'microsoft', 'yahoo', 'aol', 'other']).default('other'),
+  displayName: z.string().trim().max(120).optional(),
+  username: z.string().trim().max(320).optional(),
+});
+
 export const mailboxUpdateSchema = z.object({
   displayName: z.string().trim().max(120).optional(),
   workspaceId: uuid.optional(),

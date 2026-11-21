@@ -55,6 +55,7 @@ const PATHS: Record<string, string> = {
   back: 'M15 6l-6 6 6 6',
   all: 'M4 6h16M4 12h16M4 18h16',
   key: 'M15 7a4 4 0 1 1-3.9 4.9L5 18v2h3v-2h2v-2h2l1.1-1.1A4 4 0 0 1 15 7zM16.5 9.5h.01',
+  chevron: 'M9 6l6 6-6 6',
   sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4',
   moon: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z',
   system: 'M4 5h16v11H4zM9 20h6M12 16v4',

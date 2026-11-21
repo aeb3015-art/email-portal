@@ -1,6 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { imapConfigSchema, mailboxCreateSchema, mailboxUpdateSchema } from '@inbox-os/shared';
+import { imapConfigSchema, mailboxCreateSchema, mailboxUpdateSchema, quickConnectSchema } from '@inbox-os/shared';
+import { discover } from '../mail/discover.js';
 import { audit } from '../audit.js';
 import { one, query } from '../db/pool.js';
 import { HttpError, notFound } from '../errors.js';
@@ -44,6 +45,27 @@ mailboxRouter.post('/', requireRole('owner', 'admin'), testLimiter, h(async (req
     [auth(req).orgId, b.workspaceId, b.emailAddress, b.displayName ?? null, JSON.stringify(hosts), encryptCredentials(creds)]);
   await publishMailboxChange(row!.id);
   await audit(auth(req).orgId, { type: 'user', userId: auth(req).userId }, 'mailbox.connect', { workspaceId: b.workspaceId, targetType: 'mailbox', targetId: row!.id, metadata: { provider: 'imap', host: hosts.imapHost } });
+  res.status(201).json(await one(`SELECT ${PUBLIC_COLS} FROM mailboxes WHERE id = $1`, [row!.id]));
+}));
+
+/**
+ * One-step connect, like a phone's mail app: email + password (+ provider). The server finds
+ * working settings, verifies them, and saves the mailbox.
+ */
+mailboxRouter.post('/quick', requireRole('owner', 'admin'), testLimiter, h(async (req, res) => {
+  const b = parse(quickConnectSchema, req.body);
+  await assertWorkspace(auth(req).orgId, b.workspaceId);
+  const exists = await one('SELECT 1 FROM mailboxes WHERE organisation_id = $1 AND email_address = $2', [auth(req).orgId, b.emailAddress]);
+  if (exists) throw new HttpError(409, 'This mailbox is already connected', 'conflict');
+  const found = await discover(b.emailAddress, b.password, b.provider, b.username);
+  if (!found.ok) throw new HttpError(422, found.error ?? 'Could not connect', found.authFailed ? 'auth_failed' : 'not_found');
+  const creds: MailboxCredentials = { kind: 'password', username: found.username!, password: b.password };
+  const row = await one<{ id: string }>(
+    `INSERT INTO mailboxes (organisation_id, workspace_id, provider, email_address, display_name, config_public, credentials_encrypted)
+     VALUES ($1,$2,'imap',$3,$4,$5,$6) RETURNING id`,
+    [auth(req).orgId, b.workspaceId, b.emailAddress, b.displayName ?? null, JSON.stringify({ ...found.hosts, brand: b.provider }), encryptCredentials(creds)]);
+  await publishMailboxChange(row!.id);
+  await audit(auth(req).orgId, { type: 'user', userId: auth(req).userId }, 'mailbox.connect', { workspaceId: b.workspaceId, targetType: 'mailbox', targetId: row!.id, metadata: { provider: b.provider, host: found.hosts!.imapHost } });
   res.status(201).json(await one(`SELECT ${PUBLIC_COLS} FROM mailboxes WHERE id = $1`, [row!.id]));
 }));
 

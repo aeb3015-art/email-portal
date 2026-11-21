@@ -7,7 +7,8 @@ import {
 } from '@inbox-os/shared';
 import { Gate } from '@/components/Gate';
 import type { Mailbox } from '@/components/Composer';
-import { api, API_URL } from '@/lib/api';
+import { api, API_URL, type ApiError } from '@/lib/api';
+import { BRANDS, BrandLogo, brandFor, type MailBrand } from '@/components/Brand';
 import { useSession } from '@/lib/session';
 import { usePasskeys } from '@/lib/passkey';
 import { Brand, Icon, ThemeToggle } from '@/components/ui';
@@ -46,98 +47,168 @@ function Settings() {
 }
 
 // ---------------- Mailboxes ----------------
-const PRESETS: Record<string, { imapHost: string; imapPort: number; imapSecure: boolean; smtpHost: string; smtpPort: number; smtpSecure: boolean }> = {
-  'cPanel / Assura (mail.yourdomain.com)': { imapHost: 'mail.example.com', imapPort: 993, imapSecure: true, smtpHost: 'mail.example.com', smtpPort: 465, smtpSecure: true },
-  Yahoo: { imapHost: 'imap.mail.yahoo.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.mail.yahoo.com', smtpPort: 465, smtpSecure: true },
-  'Gmail (app password)': { imapHost: 'imap.gmail.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.gmail.com', smtpPort: 465, smtpSecure: true },
-  'Outlook.com (app password)': { imapHost: 'outlook.office365.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.office365.com', smtpPort: 587, smtpSecure: false },
+interface MailboxRow extends Mailbox { config_public?: { brand?: string; imapHost?: string } | null; last_synced_at?: string | null }
+const STATUS: Record<string, { label: string; tone: string }> = {
+  idle: { label: 'Up to date', tone: 'ok' }, syncing: { label: 'Syncing…', tone: 'muted' }, pending: { label: 'Waiting for first sync', tone: 'muted' },
+  error: { label: 'Needs attention', tone: 'warn' }, disabled: { label: 'Paused', tone: 'muted' },
 };
 
 function Mailboxes({ workspaces }: { workspaces: Workspace[] }) {
-  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
-  const [providers, setProviders] = useState({ outlook: false, gmail: false });
-  const [form, setForm] = useState({ workspaceId: '', emailAddress: '', displayName: '', ...PRESETS['cPanel / Assura (mail.yourdomain.com)']!, username: '', password: '' });
-  const [test, setTest] = useState<{ imap: { ok: boolean; error?: string }; smtp: { ok: boolean; error?: string } } | null>(null);
-  const [busy, setBusy] = useState('');
-  const [error, setError] = useState('');
+  const [mailboxes, setMailboxes] = useState<MailboxRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [adding, setAdding] = useState(false);
   const oauth = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('oauth') : null;
 
-  const load = useCallback(() => api<{ mailboxes: Mailbox[] }>('/mailboxes').then((r) => setMailboxes(r.mailboxes)), []);
-  useEffect(() => { load(); api('/oauth/providers').then(setProviders).catch(() => undefined); }, [load]);
-  useEffect(() => { if (!form.workspaceId && workspaces[0]) setForm((f) => ({ ...f, workspaceId: workspaces[0]!.id })); }, [workspaces, form.workspaceId]);
+  const load = useCallback(async () => { setMailboxes((await api<{ mailboxes: MailboxRow[] }>('/mailboxes')).mailboxes); setLoaded(true); }, []);
+  useEffect(() => { load(); }, [load]);
+  // Start with the account picker when nothing is connected yet.
+  useEffect(() => { if (loaded && !mailboxes.length) setAdding(true); }, [loaded, mailboxes.length]);
 
-  const config = () => ({ imapHost: form.imapHost, imapPort: Number(form.imapPort), imapSecure: form.imapSecure, smtpHost: form.smtpHost, smtpPort: Number(form.smtpPort), smtpSecure: form.smtpSecure, username: form.username || form.emailAddress, password: form.password });
-
-  async function run(kind: 'test' | 'save') {
-    setBusy(kind); setError(''); setTest(null);
-    try {
-      if (kind === 'test') setTest(await api('/mailboxes/test', { body: config() }));
-      else {
-        await api('/mailboxes', { body: { workspaceId: form.workspaceId, emailAddress: form.emailAddress, displayName: form.displayName || undefined, provider: 'imap', config: config() } });
-        setForm((f) => ({ ...f, emailAddress: '', username: '', password: '', displayName: '' }));
-        load();
-      }
-    } catch (e) { setError((e as Error).message); } finally { setBusy(''); }
-  }
-
-  async function startOAuth(p: 'outlook' | 'gmail') {
-    const r = await api<{ url: string }>(`/oauth/${p}/start`, { body: { workspaceId: form.workspaceId } });
-    window.location.href = r.url;
-  }
+  if (adding) return <AddAccount workspaces={workspaces} canCancel={mailboxes.length > 0} onCancel={() => setAdding(false)} onDone={() => { setAdding(false); load(); api('/mailboxes/sync', { method: 'POST' }).then(load).catch(() => undefined); }} />;
 
   return (
     <div>
-      {oauth && <div className="banner">OAuth result: {oauth}</div>}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <table><thead><tr><th>Mailbox</th><th>Workspace</th><th>Provider</th><th>Sync</th><th /></tr></thead>
-          <tbody>{mailboxes.map((m) => (
-            <tr key={m.id}>
-              <td>{m.email_address}{m.display_name && <div className="small muted">{m.display_name}</div>}</td>
-              <td><select value={m.workspace_id} onChange={async (e) => { await api(`/mailboxes/${m.id}`, { method: 'PATCH', body: { workspaceId: e.target.value } }); load(); }}>
-                {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></td>
-              <td>{m.provider}</td>
-              <td><span className={m.sync_state === 'error' ? 'warn' : 'muted'}>{m.sync_state}</span>{m.sync_error && <div className="small warn">{m.sync_error}</div>}</td>
-              <td className="row">
-                <button className="btn small" onClick={async () => { await api(`/mailboxes/${m.id}`, { method: 'PATCH', body: { enabled: !m.enabled } }); load(); }}>{m.enabled ? 'Pause' : 'Resume'}</button>
-                <button className="btn small" onClick={() => api(`/mailboxes/${m.id}/resync`, { method: 'POST' })}>Resync</button>
-                <button className="btn small danger" onClick={async () => { if (confirm(`Disconnect ${m.email_address} and delete its synced mail?`)) { await api(`/mailboxes/${m.id}`, { method: 'DELETE' }); load(); } }}>Remove</button>
-              </td>
-            </tr>))}
-            {!mailboxes.length && <tr><td colSpan={5} className="muted">No mailboxes connected.</td></tr>}
-          </tbody></table>
+      {oauth && <div className="banner">{oauth === 'connected' ? 'Account connected.' : 'The provider sign-in did not complete. Please try again.'}</div>}
+      <div className="row" style={{ marginBottom: 12 }}>
+        <h3 className="grow" style={{ margin: 0 }}>Accounts</h3>
+        <button className="btn primary" onClick={() => setAdding(true)}>Add account</button>
       </div>
+      <div className="acctlist">
+        {mailboxes.map((m) => {
+          const st = STATUS[m.enabled ? m.sync_state : 'disabled'] ?? STATUS.pending!;
+          return (
+            <div key={m.id} className="acct">
+              <BrandLogo brand={brandFor(m)} />
+              <div className="grow">
+                <div className="subj"><strong>{m.display_name || m.email_address}</strong></div>
+                <div className="small muted subj">{m.display_name ? `${m.email_address} · ` : ''}<span className={st.tone}>{st.label}</span></div>
+                {m.sync_error && m.enabled && <div className="small warn">{m.sync_error}</div>}
+              </div>
+              {workspaces.length > 1 && (
+                <select style={{ width: 150 }} value={m.workspace_id} onChange={async (e) => { await api(`/mailboxes/${m.id}`, { method: 'PATCH', body: { workspaceId: e.target.value } }); load(); }}>
+                  {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              )}
+              <button className="btn small" onClick={async () => { await api(`/mailboxes/${m.id}`, { method: 'PATCH', body: { enabled: !m.enabled } }); load(); }}>{m.enabled ? 'Pause' : 'Resume'}</button>
+              <button className="btn small danger" onClick={async () => { if (confirm(`Remove ${m.email_address} and its synced mail from Inbox OS? Mail stays on the mail server.`)) { await api(`/mailboxes/${m.id}`, { method: 'DELETE' }); load(); } }}>Remove</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Connect a mailbox</h3>
-        <label>Workspace</label>
-        <select value={form.workspaceId} onChange={(e) => setForm({ ...form, workspaceId: e.target.value })}>{workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
-        <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn" disabled={!providers.outlook} onClick={() => startOAuth('outlook')} title={providers.outlook ? '' : 'Not configured on this server'}>Connect Outlook / Microsoft 365</button>
-          <button className="btn" disabled={!providers.gmail} onClick={() => startOAuth('gmail')} title={providers.gmail ? '' : 'Not configured on this server'}>Connect Gmail (OAuth)</button>
+function AddAccount({ workspaces, canCancel, onCancel, onDone }: { workspaces: Workspace[]; canCancel: boolean; onCancel: () => void; onDone: () => void }) {
+  const [brand, setBrand] = useState<MailBrand | null>(null);
+  const [providers, setProviders] = useState({ outlook: false, gmail: false });
+  const [f, setF] = useState({ email: '', password: '', name: '', workspaceId: '' });
+  const [manual, setManual] = useState(false);
+  const [hosts, setHosts] = useState({ imapHost: '', imapPort: 993, imapSecure: true, smtpHost: '', smtpPort: 465, smtpSecure: true, username: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => { api('/oauth/providers').then(setProviders).catch(() => undefined); }, []);
+  useEffect(() => { if (!f.workspaceId && workspaces[0]) setF((x) => ({ ...x, workspaceId: workspaces[0]!.id })); }, [workspaces, f.workspaceId]);
+
+  const info = BRANDS.find((b) => b.id === brand);
+  const oauthKind = brand === 'microsoft' ? 'outlook' : brand === 'google' ? 'gmail' : null;
+  const oauthReady = oauthKind ? providers[oauthKind] : false;
+
+  async function startOAuth() {
+    setBusy(true); setError('');
+    try { window.location.href = (await api<{ url: string }>(`/oauth/${oauthKind}/start`, { body: { workspaceId: f.workspaceId } })).url; }
+    catch (e) { setError((e as Error).message); setBusy(false); }
+  }
+
+  async function connect(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError('');
+    const emailAddress = f.email.trim().toLowerCase();
+    try {
+      if (manual) {
+        await api('/mailboxes', { body: { workspaceId: f.workspaceId, emailAddress, displayName: f.name || undefined, provider: 'imap',
+          config: { imapHost: hosts.imapHost, imapPort: Number(hosts.imapPort), imapSecure: hosts.imapSecure, smtpHost: hosts.smtpHost, smtpPort: Number(hosts.smtpPort), smtpSecure: hosts.smtpSecure, username: hosts.username || emailAddress, password: f.password } } });
+      } else {
+        await api('/mailboxes/quick', { body: { workspaceId: f.workspaceId, emailAddress, password: f.password, provider: brand, displayName: f.name || undefined } });
+      }
+      onDone();
+    } catch (err) {
+      const e2 = err as ApiError;
+      setError(e2.message);
+      // Could not find the server on our own: offer the manual fields, pre-filled with the usual guess.
+      if (e2.code === 'not_found' && brand === 'other' && !manual) {
+        const domain = emailAddress.split('@')[1] ?? '';
+        setHosts((x) => ({ ...x, imapHost: `mail.${domain}`, smtpHost: `mail.${domain}`, username: emailAddress }));
+        setManual(true);
+      }
+    } finally { setBusy(false); }
+  }
+
+  if (!brand) {
+    return (
+      <div className="addacct">
+        <h3 style={{ marginTop: 0 }}>Add account</h3>
+        <p className="muted" style={{ marginTop: -6 }}>Choose your mail provider.</p>
+        <div className="brandlist">
+          {BRANDS.map((b) => (
+            <button key={b.id} className="brandrow" onClick={() => { setBrand(b.id); setError(''); setManual(false); }}>
+              <BrandLogo brand={b.id} /><span className="grow">{b.name}</span><Icon name="chevron" size={16} />
+            </button>
+          ))}
         </div>
-        <h4>Or IMAP + SMTP</h4>
-        <label>Preset</label>
-        <select onChange={(e) => setForm({ ...form, ...PRESETS[e.target.value]! })}>{Object.keys(PRESETS).map((p) => <option key={p}>{p}</option>)}</select>
-        <div className="grid2">
-          <div><label>Email address</label><input value={form.emailAddress} onChange={(e) => setForm({ ...form, emailAddress: e.target.value })} placeholder="you@yourdomain.com" /></div>
-          <div><label>Display name (optional)</label><input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} /></div>
-          <div><label>IMAP host</label><input value={form.imapHost} onChange={(e) => setForm({ ...form, imapHost: e.target.value })} /></div>
-          <div className="row"><div className="grow"><label>IMAP port</label><input type="number" value={form.imapPort} onChange={(e) => setForm({ ...form, imapPort: Number(e.target.value) })} /></div>
-            <label className="row" style={{ marginTop: 26 }}><input type="checkbox" style={{ width: 'auto' }} checked={form.imapSecure} onChange={(e) => setForm({ ...form, imapSecure: e.target.checked })} /> SSL/TLS</label></div>
-          <div><label>SMTP host</label><input value={form.smtpHost} onChange={(e) => setForm({ ...form, smtpHost: e.target.value })} /></div>
-          <div className="row"><div className="grow"><label>SMTP port</label><input type="number" value={form.smtpPort} onChange={(e) => setForm({ ...form, smtpPort: Number(e.target.value) })} /></div>
-            <label className="row" style={{ marginTop: 26 }}><input type="checkbox" style={{ width: 'auto' }} checked={form.smtpSecure} onChange={(e) => setForm({ ...form, smtpSecure: e.target.checked })} /> SSL/TLS</label></div>
-          <div><label>Username (usually the full address)</label><input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder={form.emailAddress} /></div>
-          <div><label>Password / app password</label><input type="password" autoComplete="off" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
-        </div>
-        <p className="small muted">The server needs this password to keep syncing while you're signed out. It is stored encrypted (AES-256-GCM) and is never shown again or logged.</p>
-        {test && <div className="small"><span className={test.imap.ok ? 'ok' : 'error'}>IMAP: {test.imap.ok ? 'OK' : test.imap.error}</span> · <span className={test.smtp.ok ? 'ok' : 'error'}>SMTP: {test.smtp.ok ? 'OK' : test.smtp.error}</span></div>}
-        {error && <div className="error">{error}</div>}
-        <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn" disabled={!!busy} onClick={() => run('test')}>{busy === 'test' ? 'Testing…' : 'Test connection'}</button>
-          <button className="btn primary" disabled={!!busy || !form.emailAddress || !form.password} onClick={() => run('save')}>{busy === 'save' ? 'Connecting…' : 'Connect mailbox'}</button>
-        </div>
+        {canCancel && <button className="btn" style={{ marginTop: 16 }} onClick={onCancel}>Cancel</button>}
       </div>
+    );
+  }
+
+  return (
+    <div className="addacct">
+      <button className="btn small" onClick={() => setBrand(null)}><Icon name="back" size={14} /> Providers</button>
+      <div className="row" style={{ margin: '18px 0 6px' }}><BrandLogo brand={brand} size={44} /><h3 style={{ margin: 0 }}>{info!.name}</h3></div>
+
+      {oauthReady && (
+        <>
+          <button className="btn primary wide" disabled={busy} onClick={startOAuth}>Sign in with {brand === 'google' ? 'Google' : 'Microsoft'}</button>
+          <div className="or"><span>or use an app password</span></div>
+        </>
+      )}
+      {brand === 'microsoft' && !oauthReady && (
+        <div className="banner">Most Microsoft accounts (Outlook.com, Hotmail, Microsoft 365) only allow Microsoft's own sign-in, which isn't switched on for this server yet. An app password works only if your organisation still allows it.</div>
+      )}
+
+      <form onSubmit={connect}>
+        <label>Email</label>
+        <input type="email" autoComplete="email" autoFocus required placeholder={brand === 'other' ? 'you@yourdomain.com' : 'name@example.com'} value={f.email} onChange={(e) => { setError(''); setF({ ...f, email: e.target.value }); }} />
+        <label>{info!.passwordLabel}</label>
+        <input type="password" autoComplete="off" required value={f.password} onChange={(e) => { setError(''); setF({ ...f, password: e.target.value }); }} />
+        {info!.hint && <p className="small muted" style={{ margin: '6px 0 0' }}>{info!.hint} {info!.help && <a href={info!.help.url} target="_blank" rel="noopener noreferrer">{info!.help.label}</a>}</p>}
+        <label>Description (optional)</label>
+        <input placeholder="e.g. Brokerage sales" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+        {workspaces.length > 1 && (<>
+          <label>Workspace</label>
+          <select value={f.workspaceId} onChange={(e) => setF({ ...f, workspaceId: e.target.value })}>{workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
+        </>)}
+
+        {manual && (
+          <div className="manual">
+            <strong>Server settings</strong>
+            <p className="small muted" style={{ margin: '2px 0 0' }}>You can find these in your hosting control panel under "Email accounts" or "Connect devices".</p>
+            <div className="grid2">
+              <div><label>Incoming server (IMAP)</label><input value={hosts.imapHost} onChange={(e) => setHosts({ ...hosts, imapHost: e.target.value })} required /></div>
+              <div><label>Port</label><input type="number" value={hosts.imapPort} onChange={(e) => setHosts({ ...hosts, imapPort: Number(e.target.value), imapSecure: Number(e.target.value) === 993 })} /></div>
+              <div><label>Outgoing server (SMTP)</label><input value={hosts.smtpHost} onChange={(e) => setHosts({ ...hosts, smtpHost: e.target.value })} required /></div>
+              <div><label>Port</label><input type="number" value={hosts.smtpPort} onChange={(e) => setHosts({ ...hosts, smtpPort: Number(e.target.value), smtpSecure: Number(e.target.value) === 465 })} /></div>
+            </div>
+            <label>Username</label><input value={hosts.username} onChange={(e) => setHosts({ ...hosts, username: e.target.value })} placeholder={f.email} />
+          </div>
+        )}
+
+        {error && <div className="error">{error}</div>}
+        <button className="btn primary wide" style={{ marginTop: 16 }} disabled={busy}>{busy ? (manual ? 'Checking settings…' : 'Finding your mail server…') : 'Sign in'}</button>
+        {brand === 'other' && !manual && <a className="small" style={{ display: 'inline-block', marginTop: 12 }} onClick={() => { setManual(true); const d = f.email.split('@')[1] ?? ''; setHosts((x) => ({ ...x, imapHost: x.imapHost || (d ? `mail.${d}` : ''), smtpHost: x.smtpHost || (d ? `mail.${d}` : '') })); }}>Enter server settings manually</a>}
+        <p className="small muted" style={{ marginTop: 14 }}>Your password is stored encrypted and used only to fetch and send your mail.</p>
+      </form>
     </div>
   );
 }

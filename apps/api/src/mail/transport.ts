@@ -16,7 +16,7 @@ export function hostsFor(mb: Pick<MailboxRow, 'provider' | 'config_public'>): Ho
   return mb.provider === 'imap' ? (mb.config_public as Hosts) : OAUTH_HOSTS[mb.provider];
 }
 
-export function imapClient(hosts: Hosts, creds: MailboxCredentials): ImapFlow {
+export function imapClient(hosts: Hosts, creds: MailboxCredentials, mode: { quick?: boolean } = {}): ImapFlow {
   const opts: ImapFlowOptions = {
     host: hosts.imapHost,
     port: hosts.imapPort,
@@ -25,6 +25,7 @@ export function imapClient(hosts: Hosts, creds: MailboxCredentials): ImapFlow {
     logger: false,
     emitLogs: false,
     socketTimeout: 5 * 60_000,
+    ...(mode.quick ? { connectionTimeout: 7000, greetingTimeout: 7000 } : {}),
     tls: { minVersion: 'TLSv1.2' },
   };
   return new ImapFlow(opts);
@@ -74,7 +75,7 @@ export async function testConnection(hosts: Hosts, creds: MailboxCredentials): P
 
 export function friendlyError(err: unknown): string {
   const e = err as { code?: string; responseText?: string; message?: string; authenticationFailed?: boolean };
-  if (e.authenticationFailed || /auth/i.test(e.responseText ?? '') || e.code === 'EAUTH') return 'Authentication failed: check username and password (Yahoo/Gmail need an app password).';
+  if (e.authenticationFailed || /auth/i.test(e.responseText ?? '') || e.code === 'EAUTH') return 'Authentication failed: the email or password was not accepted. Gmail, Yahoo, iCloud and AOL need an app password.';
   if (e.code === 'ENOTFOUND') return 'Host not found: check the server name.';
   if (e.code === 'ECONNREFUSED') return 'Connection refused: check the port and SSL setting.';
   if (e.code === 'ETIMEDOUT' || e.code === 'ESOCKET') return 'Connection timed out: check host, port and SSL setting.';
