@@ -9,6 +9,7 @@ import { VoiceButton } from '@/components/VoiceButton';
 import { api, ApiError } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { useSession } from '@/lib/session';
+import { Avatar, Brand, Dot, EncryptedBadge, Icon, hueFor } from '@/components/ui';
 
 interface Workspace { id: string; name: string; permission_level: string }
 interface ThreadRow { id: string; workspace_id: string; mailbox_id: string; summary_sealed: string; labels: string[]; message_count: number; unread_count: number; last_message_at: string; injection_flagged: boolean; has_pending: boolean }
@@ -71,63 +72,77 @@ function Inbox() {
   return (
     <div className="shell">
       <aside className="side">
-        <div className="row"><strong className="grow">Inbox OS</strong></div>
+        <Brand />
         {s.me!.organisations.length > 1 && (
-          <select style={{ marginTop: 8 }} value={s.org?.id} onChange={(e) => s.switchOrg(e.target.value)}>
+          <select style={{ marginTop: 14 }} value={s.org?.id} onChange={(e) => s.switchOrg(e.target.value)}>
             {s.me!.organisations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
         )}
-        <button className="btn primary" style={{ width: '100%', marginTop: 12, justifyContent: 'center' }} disabled={!mailboxes.length}
-          onClick={() => { setSelected(null); setComposer({ mailboxId: filter.mailboxId ?? mailboxes[0]!.id }); }}>Compose</button>
-        <h4>Views</h4>
-        <a className={`nav ${filter.label === 'inbox' && !filter.unread ? 'active' : ''}`} onClick={() => nav({ ...filter, label: 'inbox', unread: false })}>Inbox</a>
-        <a className={`nav ${filter.unread ? 'active' : ''}`} onClick={() => nav({ ...filter, label: 'inbox', unread: true })}>Unread</a>
-        <a className={`nav ${filter.label === 'sent' ? 'active' : ''}`} onClick={() => nav({ ...filter, label: 'sent', unread: false })}>Sent</a>
-        <a className={`nav ${filter.label === 'archived' ? 'active' : ''}`} onClick={() => nav({ ...filter, label: 'archived', unread: false })}>Archived</a>
-        <Link className="nav" href="/approvals">Approvals {pendingCount > 0 && <span className="pill accent">{pendingCount}</span>}</Link>
+        <button className="btn primary compose" disabled={!mailboxes.length}
+          onClick={() => { setSelected(null); setComposer({ mailboxId: filter.mailboxId ?? mailboxes[0]!.id }); }}><Icon name="compose" /> Compose</button>
+        <nav>
+          <a className={`nav ${filter.label === 'inbox' && !filter.unread ? 'active' : ''}`} onClick={() => nav({ ...filter, label: 'inbox', unread: false })}><Icon name="inbox" /> Inbox</a>
+          <a className={`nav ${filter.unread ? 'active' : ''}`} onClick={() => nav({ ...filter, label: 'inbox', unread: true })}><Icon name="unread" /> Unread</a>
+          <a className={`nav ${filter.label === 'sent' ? 'active' : ''}`} onClick={() => nav({ ...filter, label: 'sent', unread: false })}><Icon name="sent" /> Sent</a>
+          <a className={`nav ${filter.label === 'archived' ? 'active' : ''}`} onClick={() => nav({ ...filter, label: 'archived', unread: false })}><Icon name="archive" /> Archived</a>
+          <Link className="nav" href="/approvals"><Icon name="approvals" /> <span className="grow">Approvals</span> {pendingCount > 0 && <span className="count">{pendingCount}</span>}</Link>
+        </nav>
         <h4>Workspaces</h4>
-        <a className={`nav ${!filter.workspaceId && !filter.mailboxId ? 'active' : ''}`} onClick={() => nav({ label: filter.label })}>All workspaces</a>
+        <a className={`nav ${!filter.workspaceId && !filter.mailboxId ? 'active' : ''}`} onClick={() => nav({ label: filter.label })}><Icon name="all" /> All workspaces</a>
         {workspaces.map((w) => (
           <div key={w.id}>
-            <a className={`nav ${filter.workspaceId === w.id && !filter.mailboxId ? 'active' : ''}`} onClick={() => nav({ label: filter.label, workspaceId: w.id })}>{w.name}</a>
+            <a className={`nav ${filter.workspaceId === w.id && !filter.mailboxId ? 'active' : ''}`} onClick={() => nav({ label: filter.label, workspaceId: w.id })}><Dot seed={w.id} /> {w.name}</a>
             {mailboxes.filter((m) => m.workspace_id === w.id).map((m) => (
-              <a key={m.id} className={`nav small ${filter.mailboxId === m.id ? 'active' : ''}`} style={{ paddingLeft: 20 }} onClick={() => nav({ label: filter.label, mailboxId: m.id })}>
-                {m.email_address} {m.sync_state === 'error' && <span className="pill warn" title={m.sync_error ?? ''}>!</span>}
+              <a key={m.id} className={`nav sub ${filter.mailboxId === m.id ? 'active' : ''}`} onClick={() => nav({ label: filter.label, mailboxId: m.id })}>
+                <span className="grow subj">{m.email_address}</span> {m.sync_state === 'error' && <span className="pill warn" title={m.sync_error ?? ''}>!</span>}
               </a>
             ))}
           </div>
         ))}
-        <h4>Account</h4>
-        <Link className="nav" href="/settings">Settings</Link>
-        <a className="nav" onClick={s.logout}>Sign out</a>
+        <div className="sidefoot">
+          <Link className="nav" href="/settings"><Icon name="settings" /> Settings</Link>
+          <a className="nav" onClick={s.logout}><Icon name="signout" /> Sign out</a>
+          <div className="me"><Avatar name={s.me!.user.name} size={30} /><div className="grow"><div className="subj">{s.me!.user.name}</div><div className="subj small muted">{s.org?.name}</div></div></div>
+          <EncryptedBadge />
+        </div>
       </aside>
 
       <section className="list">
-        <div style={{ padding: 10, borderBottom: '1px solid var(--line)' }}>
-          <input placeholder="Search loaded threads…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="listhead">
+          <h2>{filter.unread ? 'Unread' : filter.label === 'sent' ? 'Sent' : filter.label === 'archived' ? 'Archived' : 'Inbox'}
+            <span className="muted small"> {filter.mailboxId ? mailboxes.find((m) => m.id === filter.mailboxId)?.email_address : filter.workspaceId ? workspaces.find((w) => w.id === filter.workspaceId)?.name : 'All workspaces'}</span></h2>
+          <div className="search"><Icon name="search" size={16} /><input placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         </div>
-        {error && <div className="error" style={{ padding: 10 }}>{error}</div>}
-        {!mailboxes.length && <div className="muted" style={{ padding: 14 }}>No mailboxes yet. <Link href="/settings?tab=mailboxes">Connect one</Link>.</div>}
-        {visible.map((t) => (
-          <div key={t.id} className={`item ${selected === t.id ? 'active' : ''} ${t.unread_count ? 'unread' : ''}`} onClick={() => { setSelected(t.id); setComposer(null); }}>
-            <div className="row">
-              <span className="grow subj">{t.summary.participants.slice(0, 3).join(', ') || '(no participants)'}</span>
-              <span className="muted small">{timeAgo(t.last_message_at)}</span>
+        {error && <div className="error" style={{ padding: 16 }}>{error}</div>}
+        {!mailboxes.length && <div className="empty"><Icon name="inbox" size={30} /><p>No mailboxes yet</p><Link className="btn primary" href="/settings?tab=mailboxes">Connect a mailbox</Link></div>}
+        {mailboxes.length > 0 && !visible.length && <div className="empty"><Icon name="approvals" size={30} /><p>Nothing here</p></div>}
+        {visible.map((t) => {
+          const who = t.summary.participants[0] ?? '?';
+          return (
+            <div key={t.id} className={`item ${selected === t.id ? 'active' : ''} ${t.unread_count ? 'unread' : ''}`} onClick={() => { setSelected(t.id); setComposer(null); }}>
+              <Avatar name={who} />
+              <div className="grow">
+                <div className="row nowrap">
+                  <span className="grow who subj">{t.summary.participants.slice(0, 2).join(', ') || '(no participants)'}{t.message_count > 1 && <span className="muted"> · {t.message_count}</span>}</span>
+                  <span className="muted small">{timeAgo(t.last_message_at)}</span>
+                </div>
+                <div className="subj title">{t.summary.subject || '(no subject)'}</div>
+                <div className="snip">{t.summary.snippet}</div>
+                {(t.has_pending || t.injection_flagged) && <div className="row" style={{ marginTop: 6 }}>
+                  {t.has_pending && <span className="pill accent">Awaiting approval</span>}
+                  {t.injection_flagged && <span className="pill warn">Suspicious</span>}
+                </div>}
+              </div>
+              <span className="ws" style={{ background: `hsl(${hueFor(t.workspace_id)} 65% 55%)` }} title={workspaces.find((w) => w.id === t.workspace_id)?.name} />
             </div>
-            <div className="subj">{t.summary.subject || '(no subject)'} {t.message_count > 1 && <span className="muted small">({t.message_count})</span>}</div>
-            <div className="snip">{t.summary.snippet}</div>
-            <div className="row" style={{ marginTop: 2 }}>
-              {t.has_pending && <span className="pill accent">awaiting approval</span>}
-              {t.injection_flagged && <span className="pill warn">suspicious</span>}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
 
       <main className="main">
         {composer && !selected && <Composer init={composer} mailboxes={mailboxes} onCancel={() => setComposer(null)} onDone={() => { setComposer(null); loadThreads(); }} />}
         {selected && <ThreadView key={selected} threadId={selected} mailboxes={mailboxes} onChanged={loadThreads} />}
-        {!selected && !composer && <div className="muted" style={{ marginTop: '30vh', textAlign: 'center' }}>Select a thread</div>}
+        {!selected && !composer && <div className="empty big"><Brand size={44} /><p>Select a conversation to read it</p><EncryptedBadge>Decrypted only on this device</EncryptedBadge></div>}
       </main>
     </div>
   );
@@ -208,9 +223,9 @@ function ThreadView({ threadId, mailboxes, onChanged }: { threadId: string; mail
   return (
     <div>
       <div className="row" style={{ marginBottom: 12 }}>
-        <h2 className="grow" style={{ margin: 0, fontSize: 18 }}>{subj || '(no subject)'}</h2>
+        <h2 className="grow threadtitle">{subj || '(no subject)'}</h2>
         <span className="muted small">{mailbox?.email_address}</span>
-        <button className="btn" onClick={archive}>{thread.labels.includes('archived') ? 'Unarchive' : 'Archive'}</button>
+        <button className="btn" onClick={archive}><Icon name="archive" size={16} /> {thread.labels.includes('archived') ? 'Unarchive' : 'Archive'}</button>
       </div>
       {thread.injection_flagged && <div className="banner">This thread contains text that looks like instructions to an AI agent. Auto-send is disabled for it, and every agent reply needs your approval.</div>}
       {messages.map((x) => <MessageCard key={x.id} x={x} onDownload={download} />)}
@@ -232,9 +247,9 @@ function ThreadView({ threadId, mailboxes, onChanged }: { threadId: string; mail
         <Composer init={composer} mailboxes={mailboxes} onCancel={() => setComposer(null)} onDone={() => { setComposer(null); load(); onChanged(); }} />
       ) : (
         <>
-          <div className="row"><button className="btn primary" onClick={() => reply(false)}>Reply</button><button className="btn" onClick={() => reply(true)}>Reply all</button><button className="btn" onClick={forward}>Forward</button></div>
-          <div className="card" style={{ marginTop: 12 }}>
-            <strong>Ask the agent</strong>
+          <div className="row"><button className="btn primary" onClick={() => reply(false)}><Icon name="reply" size={16} /> Reply</button><button className="btn" onClick={() => reply(true)}><Icon name="reply" size={16} /> Reply all</button><button className="btn" onClick={forward}><Icon name="forward" size={16} /> Forward</button></div>
+          <div className="card agent" style={{ marginTop: 16 }}>
+            <strong><Icon name="spark" size={16} /> Ask the agent</strong>
             <p className="small muted" style={{ margin: '4px 0 8px' }}>Type or dictate an instruction, e.g. “reply to Liana, ask about the Blue Card, keep it polite”.</p>
             <textarea rows={2} style={{ minHeight: 60 }} value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Instruction for the agent…" />
             <div className="row" style={{ marginTop: 8 }}>
@@ -260,6 +275,7 @@ function MessageCard({ x, onDownload }: { x: MessageRow & { m: SealedMessage }; 
   return (
     <div className="msg">
       <header className="row" onClick={() => setOpen(!open)} style={{ cursor: 'pointer' }}>
+        <Avatar name={x.m.fromName || x.m.fromAddress} />
         <div className="grow">
           <strong>{x.m.fromName || x.m.fromAddress}</strong> <span className="muted small">&lt;{x.m.fromAddress}&gt;</span>
           <div className="small muted">to {x.m.to.join(', ')}{x.m.cc.length ? `, cc ${x.m.cc.join(', ')}` : ''}</div>
@@ -271,7 +287,7 @@ function MessageCard({ x, onDownload }: { x: MessageRow & { m: SealedMessage }; 
           <MailBody html={x.m.html} text={x.m.text} />
           {x.attachments.length > 0 && (
             <div className="row" style={{ marginTop: 10 }}>
-              {x.attachments.map((a) => <button key={a.id} className="btn small" onClick={() => onDownload(a)}>📎 {names[a.id] ?? 'attachment'} <span className="muted">({Math.ceil(a.size / 1024)} KB)</span></button>)}
+              {x.attachments.map((a) => <button key={a.id} className="btn small" onClick={() => onDownload(a)}><Icon name="clip" size={14} /> {names[a.id] ?? 'attachment'} <span className="muted">({Math.ceil(a.size / 1024)} KB)</span></button>)}
             </div>
           )}
         </div>

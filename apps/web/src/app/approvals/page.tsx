@@ -7,6 +7,7 @@ import { Composer, type Mailbox } from '@/components/Composer';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { useSession } from '@/lib/session';
+import { Brand, Icon } from '@/components/ui';
 
 interface Draft { id: string; workspace_id: string; mailbox_id: string; thread_id: string | null; origin: string; category: string | null; content_sealed: string; approval_reason: string | null; updated_at: string; status: string }
 
@@ -28,7 +29,7 @@ function Approvals() {
 
   return (
     <div className="page">
-      <div className="row"><Link href="/">← Inbox</Link></div>
+      <div className="row topbar"><Link className="btn" href="/"><Icon name="back" size={16} /> Inbox</Link><span className="grow" /><Brand size={24} /></div>
       <h1>Approval queue</h1>
       <p className="muted">Drafts the agent (or an MCP client) wants to send. Nothing here leaves until a person approves it.</p>
       {error && <div className="error">{error}</div>}

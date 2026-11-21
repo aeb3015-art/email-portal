@@ -1,4 +1,5 @@
 'use client';
+import { AuthShell } from '@/components/ui';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/session';
@@ -16,9 +17,7 @@ export function Gate({ children }: { children: ReactNode }) {
   if (!me.organisations.length) return <div className="auth">You are not a member of any organisation.</div>;
   if (!privateKey) {
     return (
-      <div className="auth">
-        <h1>Unlock</h1>
-        <p className="muted small">Your encryption key is only kept in memory. Enter your password to decrypt your mail on this device.</p>
+      <AuthShell title="Unlock" subtitle={<>Your encryption key is only kept in memory. Enter your password to decrypt your mail on this device.</>}>
         <form className="card" onSubmit={async (e) => {
           e.preventDefault(); setBusy(true); setError('');
           try { await unlock(password); } catch { setError('Wrong password'); } finally { setBusy(false); }
@@ -31,7 +30,7 @@ export function Gate({ children }: { children: ReactNode }) {
             <span className="grow" /><button type="button" className="btn" onClick={logout}>Sign out</button>
           </div>
         </form>
-      </div>
+      </AuthShell>
     );
   }
   return <>{children}</>;

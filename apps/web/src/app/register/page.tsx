@@ -1,4 +1,5 @@
 'use client';
+import { AuthShell } from '@/components/ui';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -45,9 +46,7 @@ export default function RegisterPage() {
 
   if (recoveryKey) {
     return (
-      <div className="auth">
-        <h1>Save your recovery key</h1>
-        <p className="muted small">Inbox OS cannot read your mail and cannot reset your password. If you forget your password, this key is the only way back in. Store it in a password manager. It will not be shown again.</p>
+      <AuthShell title="Save your recovery key" subtitle={<>Inbox OS cannot read your mail and cannot reset your password. If you forget your password, this key is the only way back in. Store it in a password manager. It will not be shown again.</>}>
         <div className="code">{recoveryKey}</div>
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => navigator.clipboard.writeText(recoveryKey)}>Copy</button>
@@ -55,14 +54,12 @@ export default function RegisterPage() {
           <span className="grow" />
           <button className="btn primary" disabled={!saved} onClick={async () => { await login(f.email.trim().toLowerCase(), f.password); router.push('/settings'); }}>Continue</button>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="auth">
-      <h1>Create your organisation</h1>
-      <p className="muted small">Keys are generated in your browser. The server stores only encrypted data it cannot read.</p>
+    <AuthShell title="Create your organisation" subtitle={<>Keys are generated in your browser. The server stores only encrypted data it cannot read.</>}>
       <form className="card" onSubmit={submit}>
         <label>Your name</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />
         <label>Email</label><input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
@@ -75,6 +72,6 @@ export default function RegisterPage() {
           <span className="grow" /><Link className="small" href="/login">Sign in instead</Link>
         </div>
       </form>
-    </div>
+    </AuthShell>
   );
 }

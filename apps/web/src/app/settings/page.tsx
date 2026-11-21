@@ -9,6 +9,7 @@ import { Gate } from '@/components/Gate';
 import type { Mailbox } from '@/components/Composer';
 import { api, API_URL } from '@/lib/api';
 import { useSession } from '@/lib/session';
+import { Brand, Icon } from '@/components/ui';
 
 const TABS = ['mailboxes', 'workspaces', 'agent', 'mcp', 'members', 'security', 'audit'] as const;
 type Tab = (typeof TABS)[number];
@@ -29,7 +30,7 @@ function Settings() {
 
   return (
     <div className="page">
-      <div className="row"><Link href="/">← Inbox</Link></div>
+      <div className="row topbar"><Link className="btn" href="/"><Icon name="back" size={16} /> Inbox</Link><span className="grow" /><Brand size={24} /></div>
       <h1>Settings</h1>
       <div className="tabs">{TABS.map((t) => <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{t === 'mcp' ? 'MCP' : t[0]!.toUpperCase() + t.slice(1)}</button>)}</div>
       {tab === 'mailboxes' && <Mailboxes workspaces={workspaces} />}

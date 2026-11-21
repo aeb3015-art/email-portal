@@ -1,4 +1,5 @@
 'use client';
+import { AuthShell } from '@/components/ui';
 import Link from 'next/link';
 import { useState } from 'react';
 import { deriveKeyFromSecret, deriveKeys, newKdfParams, publicKeyFromPrivate, toB64, unwrapSecret, wrapSecret } from '@inbox-os/shared';
@@ -27,9 +28,7 @@ export default function RecoverPage() {
   }
 
   return (
-    <div className="auth">
-      <h1>Recover your account</h1>
-      <p className="muted small">Owners can recover with the recovery key shown at sign-up. Members: ask an admin to re-invite you. Without a key your encrypted data cannot be recovered, not even by us.</p>
+    <AuthShell title="Recover your account" subtitle={<>Owners can recover with the recovery key shown at sign-up. Members: ask an admin to re-invite you. Without a key your encrypted data cannot be recovered, not even by us.</>}>
       {done ? <div className="card">Password updated. <Link href="/login">Sign in</Link></div> : (
         <form className="card" onSubmit={submit}>
           <label>Email</label><input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
@@ -39,6 +38,6 @@ export default function RecoverPage() {
           <button className="btn primary" style={{ marginTop: 14 }} disabled={busy}>Reset password</button>
         </form>
       )}
-    </div>
+    </AuthShell>
   );
 }

@@ -1,4 +1,5 @@
 'use client';
+import { AuthShell } from '@/components/ui';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -24,9 +25,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth">
-      <h1>Sign in to Inbox OS</h1>
-      <p className="muted small">Your password never leaves this device. It unlocks your organisation's encryption key locally.</p>
+    <AuthShell title="Sign in to Inbox OS" subtitle={<>Your password never leaves this device. It unlocks your organisation's encryption key locally.</>}>
       <form className="card" onSubmit={submit}>
         <label>Email</label>
         <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -40,6 +39,6 @@ export default function LoginPage() {
           <Link className="small" href="/recover">Forgot password</Link>
         </div>
       </form>
-    </div>
+    </AuthShell>
   );
 }
