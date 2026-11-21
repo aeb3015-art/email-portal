@@ -9,7 +9,7 @@ import { VoiceButton } from '@/components/VoiceButton';
 import { api, ApiError } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { useSession } from '@/lib/session';
-import { Avatar, Brand, Dot, EncryptedBadge, Icon, hueFor } from '@/components/ui';
+import { Avatar, Brand, Dot, EncryptedBadge, Icon, ThemeToggle, hueFor } from '@/components/ui';
 
 interface Workspace { id: string; name: string; permission_level: string }
 interface ThreadRow { id: string; workspace_id: string; mailbox_id: string; summary_sealed: string; labels: string[]; message_count: number; unread_count: number; last_message_at: string; injection_flagged: boolean; has_pending: boolean }
@@ -119,7 +119,7 @@ function Inbox() {
           <Link className="nav" href="/settings"><Icon name="settings" /> Settings</Link>
           <a className="nav" onClick={s.logout}><Icon name="signout" /> Sign out</a>
           <div className="me"><Avatar name={s.me!.user.name} size={30} /><div className="grow"><div className="subj">{s.me!.user.name}</div><div className="subj small muted">{s.org?.name}</div></div></div>
-          <EncryptedBadge />
+          <div className="row" style={{ justifyContent: 'space-between' }}><EncryptedBadge /><ThemeToggle /></div>
         </div>
       </aside>
 

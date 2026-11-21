@@ -9,7 +9,11 @@ export const metadata = { title: 'Inbox OS', description: 'Zero-access, agent-fi
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>
+        {/* Apply the saved theme before first paint to avoid a flash. */}
+        <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('iox_theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}" }} />
+      </head>
       <body><SessionProvider>{children}</SessionProvider></body>
     </html>
   );

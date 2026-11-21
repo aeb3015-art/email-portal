@@ -9,6 +9,7 @@ import { logger } from './logger.js';
 import { enabledMailboxIds, syncMailboxes } from './mail/syncOnce.js';
 import { mcpRouter } from './mcp/server.js';
 import { authRouter } from './routes/auth.js';
+import { passkeyRouter } from './routes/passkeys.js';
 import { inboxRouter } from './routes/inbox.js';
 import { mailboxRouter } from './routes/mailboxes.js';
 import { oauthRouter } from './routes/oauth.js';
@@ -51,6 +52,7 @@ export function createApp() {
     next();
   });
 
+  app.use('/auth/passkeys', passkeyRouter);
   app.use('/auth', authRouter);
   app.use('/oauth', oauthRouter);
   app.use('/org', orgRouter);

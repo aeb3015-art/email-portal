@@ -9,7 +9,8 @@ import { Gate } from '@/components/Gate';
 import type { Mailbox } from '@/components/Composer';
 import { api, API_URL } from '@/lib/api';
 import { useSession } from '@/lib/session';
-import { Brand, Icon } from '@/components/ui';
+import { usePasskeys } from '@/lib/passkey';
+import { Brand, Icon, ThemeToggle } from '@/components/ui';
 
 const TABS = ['mailboxes', 'workspaces', 'agent', 'mcp', 'members', 'security', 'audit'] as const;
 type Tab = (typeof TABS)[number];
@@ -30,7 +31,7 @@ function Settings() {
 
   return (
     <div className="page">
-      <div className="row topbar"><Link className="btn" href="/"><Icon name="back" size={16} /> Inbox</Link><span className="grow" /><Brand size={24} /></div>
+      <div className="row topbar"><Link className="btn" href="/"><Icon name="back" size={16} /> Inbox</Link><span className="grow" /><ThemeToggle /><Brand size={24} /></div>
       <h1>Settings</h1>
       <div className="tabs">{TABS.map((t) => <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{t === 'mcp' ? 'MCP' : t[0]!.toUpperCase() + t.slice(1)}</button>)}</div>
       {tab === 'mailboxes' && <Mailboxes workspaces={workspaces} />}
@@ -38,7 +39,7 @@ function Settings() {
       {tab === 'agent' && <Agent />}
       {tab === 'mcp' && <McpTokens workspaces={workspaces} />}
       {tab === 'members' && <Members />}
-      {tab === 'security' && <Security />}
+      {tab === 'security' && <><Passkeys /><Security /></>}
       {tab === 'audit' && <Audit />}
     </div>
   );
@@ -378,6 +379,44 @@ function Members() {
 }
 
 // ---------------- Security ----------------
+function Passkeys() {
+  const s = useSession();
+  const hasPasskeys = usePasskeys();
+  const [rows, setRows] = useState<{ id: string; name: string; created_at: string; last_used_at: string | null; can_unlock: boolean }[]>([]);
+  const [name, setName] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => setRows((await api('/auth/passkeys', { noOrg: true })).passkeys), []);
+  useEffect(() => { load().catch(() => undefined); }, [load]);
+  if (!hasPasskeys) return null;
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h3 style={{ marginTop: 0 }}>Passkeys</h3>
+      <p className="small muted">Sign in and unlock your mail with Face ID, Touch ID or your device PIN. Each passkey holds its own protected copy of your encryption key; the server never sees it.</p>
+      {rows.map((r) => (
+        <div key={r.id} className="row" style={{ padding: '8px 0', borderBottom: '1px solid var(--line-2)' }}>
+          <Icon name="key" size={16} />
+          <div className="grow"><strong>{r.name}</strong> {!r.can_unlock && <span className="pill warn">sign-in only</span>}
+            <div className="small muted">Added {new Date(r.created_at).toLocaleDateString()}{r.last_used_at ? ` · last used ${new Date(r.last_used_at).toLocaleDateString()}` : ''}</div></div>
+          <button className="btn small danger" onClick={async () => { try { await api(`/auth/passkeys/${r.id}`, { method: 'DELETE', noOrg: true }); load(); } catch (e) { setMsg((e as Error).message); } }}>Remove</button>
+        </div>
+      ))}
+      <div className="row" style={{ marginTop: 12 }}>
+        <input style={{ maxWidth: 240 }} placeholder="Name, e.g. MacBook" value={name} onChange={(e) => setName(e.target.value)} />
+        <button className="btn primary" disabled={busy} onClick={async () => {
+          setBusy(true); setMsg('');
+          try {
+            const ok = await s.addPasskey(name || 'Passkey');
+            setMsg(ok ? 'Passkey added.' : 'Passkey added for sign-in, but this device cannot use it to unlock encrypted mail. You will still need your password.');
+            setName(''); load();
+          } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
+        }}><Icon name="key" size={16} /> Add a passkey</button>
+      </div>
+      {msg && <div className="small" style={{ marginTop: 8 }}>{msg}</div>}
+    </div>
+  );
+}
+
 function Security() {
   const s = useSession();
   const [cur, setCur] = useState('');
@@ -397,9 +436,16 @@ function Security() {
       await s.refresh();
     } catch (e) { setMsg((e as Error).message); }
   }
+  if (!s.me!.user.has_password) return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Password</h3>
+      <p className="small muted" style={{ marginBottom: 0 }}>This account signs in with a passkey and has no password. Keep your recovery key safe, and add a second passkey on another device as a backup.</p>
+    </div>
+  );
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Change password</h3>
+      <h3 style={{ marginTop: 0 }}>{s.me!.user.has_password ? 'Change password' : 'Password'}</h3>
+      {!s.me!.user.has_password && <p className="small muted">This account signs in with a passkey and has no password. Keep your recovery key safe, and add a second passkey on another device as a backup.</p>}
       <p className="small muted">Your organisation key is re-encrypted with the new password in this browser.</p>
       <label>Current password</label><input type="password" value={cur} onChange={(e) => setCur(e.target.value)} />
       <label>New password</label><input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />

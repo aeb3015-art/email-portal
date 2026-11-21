@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+'use client';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 
 const HUES = [248, 172, 22, 330, 200, 142, 280, 45];
 export function hueFor(key: string): number {
@@ -15,7 +16,7 @@ export function initials(nameOrEmail: string): string {
 
 export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   const hue = hueFor(name.toLowerCase());
-  const style: CSSProperties = { width: size, height: size, fontSize: size * 0.38, background: `hsl(${hue} 45% 94%)`, color: `hsl(${hue} 45% 30%)` };
+  const style = { width: size, height: size, fontSize: size * 0.38, '--h': hue } as CSSProperties;
   return <span className="avatar" style={style} aria-hidden>{initials(name)}</span>;
 }
 
@@ -27,7 +28,7 @@ export function Brand({ size = 28 }: { size?: number }) {
   return (
     <span className="brand">
       <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
-        <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#18181b" /><stop offset="1" stopColor="#3f3f46" /></linearGradient></defs>
+        <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#4f46e5" /><stop offset="1" stopColor="#312e81" /></linearGradient></defs>
         <rect width="32" height="32" rx="9" fill="url(#bg)" />
         <path d="M8 12.5l8 5.5 8-5.5M8 11h16v10.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 8 21.5z" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -53,6 +54,10 @@ const PATHS: Record<string, string> = {
   clip: 'M8 12.500l6-6a3 3 0 0 1 4.2 4.200l-7.5 7.500a4.5 4.5 0 0 1-6.4-6.400L11 5',
   back: 'M15 6l-6 6 6 6',
   all: 'M4 6h16M4 12h16M4 18h16',
+  key: 'M15 7a4 4 0 1 1-3.9 4.9L5 18v2h3v-2h2v-2h2l1.1-1.1A4 4 0 0 1 15 7zM16.5 9.5h.01',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4',
+  moon: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z',
+  system: 'M4 5h16v11H4zM9 20h6M12 16v4',
 };
 
 export function Icon({ name, size = 18 }: { name: keyof typeof PATHS | string; size?: number }) {
@@ -75,8 +80,32 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
         <h1>{title}</h1>
         <p className="muted">{subtitle}</p>
         {children}
-        <div style={{ marginTop: 18, textAlign: 'center' }}><EncryptedBadge>Zero-access: only you hold the keys</EncryptedBadge></div>
+        <div className="row" style={{ marginTop: 18, justifyContent: 'space-between' }}><EncryptedBadge>Zero-access: only you hold the keys</EncryptedBadge><ThemeToggle /></div>
       </div>
+    </div>
+  );
+}
+
+type Theme = 'light' | 'dark' | 'system';
+
+/** Light / dark / follow-system switch. The choice is remembered on this device. */
+export function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>('system');
+  useEffect(() => {
+    try { const t = localStorage.getItem('iox_theme'); if (t === 'light' || t === 'dark') setTheme(t); } catch { /* ignore */ }
+  }, []);
+  const apply = (t: Theme) => {
+    setTheme(t);
+    try { if (t === 'system') localStorage.removeItem('iox_theme'); else localStorage.setItem('iox_theme', t); } catch { /* ignore */ }
+    if (t === 'system') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
+  };
+  return (
+    <div className="themetoggle" role="group" aria-label="Theme">
+      {(['light', 'system', 'dark'] as const).map((t) => (
+        <button key={t} type="button" className={theme === t ? 'on' : ''} onClick={() => apply(t)} title={t === 'system' ? 'Match system' : t === 'light' ? 'Light' : 'Dark'} aria-pressed={theme === t}>
+          <Icon name={t === 'light' ? 'sun' : t === 'dark' ? 'moon' : 'system'} size={14} />
+        </button>
+      ))}
     </div>
   );
 }

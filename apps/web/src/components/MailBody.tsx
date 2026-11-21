@@ -42,7 +42,7 @@ export function MailBody({ html, text }: { html: string | null; text: string }) 
 
   if (!result) return <pre>{text}</pre>;
   const csp = `default-src 'none'; style-src 'unsafe-inline'; img-src data: ${allowRemote ? 'https:' : ''}; font-src data:;`;
-  const doc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>body{margin:0;font:14px/1.45 system-ui,sans-serif;color:#1c1c1a;word-wrap:break-word}img{max-width:100%;height:auto}</style></head><body>${result.html}</body></html>`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>body{margin:0;padding:10px 12px;background:#fff;font:14px/1.45 system-ui,sans-serif;color:#1c1c1a;word-wrap:break-word}img{max-width:100%;height:auto}</style></head><body>${result.html}</body></html>`;
   return (
     <div>
       {result.blocked > 0 && !allowRemote && (

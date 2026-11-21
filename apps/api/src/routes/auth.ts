@@ -23,12 +23,12 @@ authRouter.post('/prelogin', h(async (req, res) => {
 }));
 
 authRouter.post('/register', h(async (req, res) => {
-  const b = parse(registerSchema.extend({ recoveryProof: z.string().max(128) }), req.body);
+  const b = parse(registerSchema.extend({ recoveryProof: z.string().max(128), passwordless: z.boolean().optional() }), req.body);
   const authHash = await hashAuthKey(b.authKey);
   const result = await tx(async (db) => {
     const exists = await one('SELECT 1 FROM users WHERE email = $1', [b.email], db);
     if (exists) throw new HttpError(409, 'An account with this email already exists', 'conflict');
-    const user = await one<{ id: string }>('INSERT INTO users (email, name, auth_hash, kdf_params) VALUES ($1,$2,$3,$4) RETURNING id', [b.email, b.name, authHash, JSON.stringify(b.kdf)], db);
+    const user = await one<{ id: string }>('INSERT INTO users (email, name, auth_hash, kdf_params, has_password) VALUES ($1,$2,$3,$4,$5) RETURNING id', [b.email, b.name, authHash, JSON.stringify(b.kdf), !b.passwordless], db);
     const org = await one<{ id: string }>('INSERT INTO organisations (name, public_key, recovery_wrapped_key, recovery_proof_hash) VALUES ($1,$2,$3,$4) RETURNING id',
       [b.organisationName, b.orgPublicKey, b.recoveryWrappedOrgKey, sha256(b.recoveryProof)], db);
     await db.query(`INSERT INTO memberships (organisation_id, user_id, role, wrapped_org_key) VALUES ($1,$2,'owner',$3)`, [org!.id, user!.id, b.wrappedOrgKey]);
@@ -43,7 +43,7 @@ authRouter.post('/register', h(async (req, res) => {
 
 authRouter.post('/login', h(async (req, res) => {
   const b = parse(loginSchema, req.body);
-  const u = await one<{ id: string; auth_hash: string }>('SELECT id, auth_hash FROM users WHERE email = $1', [b.email]);
+  const u = await one<{ id: string; auth_hash: string }>('SELECT id, auth_hash FROM users WHERE email = $1 AND has_password', [b.email]);
   // Constant-ish time: always run bcrypt.
   const ok = await verifyAuthKey(b.authKey, u?.auth_hash ?? '$2a$12$CwTycUXWue0Thq9StjUM0uJ8.ZYpA1vZ0vPq9Z0qv5R1J0sR1Z9eO');
   if (!u || !ok) throw new HttpError(401, 'Invalid email or password', 'unauthorized');
@@ -58,7 +58,7 @@ authRouter.post('/logout', requireAuth({ org: false }), h(async (req, res) => {
 
 /** Profile + memberships, including each org's public key and this user's wrapped org key. */
 authRouter.get('/me', requireAuth({ org: false }), h(async (req, res) => {
-  const user = await one('SELECT id, email, name, kdf_params FROM users WHERE id = $1', [auth(req).userId]);
+  const user = await one('SELECT id, email, name, kdf_params, has_password FROM users WHERE id = $1', [auth(req).userId]);
   const orgs = (await query(
     `SELECT o.id, o.name, o.public_key, m.role, m.wrapped_org_key FROM memberships m JOIN organisations o ON o.id = m.organisation_id WHERE m.user_id = $1 ORDER BY o.created_at`,
     [auth(req).userId])).rows;
@@ -75,7 +75,7 @@ authRouter.post('/change-password', requireAuth({ org: false }), h(async (req, r
   if (memberships.some((m) => !provided.has(m.organisation_id))) throw new HttpError(400, 'Re-wrapped keys missing for some organisations', 'bad_request');
   const newHash = await hashAuthKey(b.authKey);
   await tx(async (db) => {
-    await db.query('UPDATE users SET auth_hash = $2, kdf_params = $3 WHERE id = $1', [userId, newHash, JSON.stringify(b.kdf)]);
+    await db.query('UPDATE users SET auth_hash = $2, kdf_params = $3, has_password = true WHERE id = $1', [userId, newHash, JSON.stringify(b.kdf)]);
     for (const m of memberships) await db.query('UPDATE memberships SET wrapped_org_key = $3 WHERE user_id = $1 AND organisation_id = $2', [userId, m.organisation_id, provided.get(m.organisation_id)]);
     await db.query('DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2', [userId, sha256(auth(req).sessionToken)]);
   });
