@@ -13,25 +13,30 @@
  * Envelope format for sealed records (string):
  *   "e1:" + base64url( sealed_box(contentKey) ) + ":" + base64url( nonce || secretbox(json, contentKey) )
  */
-import _sodium from 'libsodium-wrappers-sumo';
+import type _sodium from 'libsodium-wrappers-sumo';
 
 export type Sodium = typeof _sodium;
 let sodiumPromise: Promise<Sodium> | null = null;
 
+/** Loaded on first use so the (large) crypto library never blocks the first paint. */
 export function getSodium(): Promise<Sodium> {
-  if (!sodiumPromise) sodiumPromise = _sodium.ready.then(() => _sodium);
+  if (!sodiumPromise) {
+    sodiumPromise = import('libsodium-wrappers-sumo').then(async (m) => {
+      const lib = ((m as { default?: Sodium }).default ?? m) as Sodium;
+      await lib.ready;
+      return lib;
+    });
+  }
   return sodiumPromise;
 }
 
-const B64 = () => _sodium.base64_variants.URLSAFE_NO_PADDING;
-
 export async function toB64(bytes: Uint8Array): Promise<string> {
   const s = await getSodium();
-  return s.to_base64(bytes, B64());
+  return s.to_base64(bytes, s.base64_variants.URLSAFE_NO_PADDING);
 }
 export async function fromB64(str: string): Promise<Uint8Array> {
   const s = await getSodium();
-  return s.from_base64(str, B64());
+  return s.from_base64(str, s.base64_variants.URLSAFE_NO_PADDING);
 }
 
 // ---------------- Key derivation ----------------

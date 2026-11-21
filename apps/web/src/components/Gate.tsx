@@ -13,7 +13,7 @@ export function Gate({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { if (ready && !me) router.replace('/login'); }, [ready, me, router]);
-  if (!ready || !me) return <div className="auth muted">Loading…</div>;
+  if (!ready || !me) return <div className="authwrap"><div className="skel" style={{ width: 360, height: 220 }} /></div>;
   if (!me.organisations.length) return <div className="auth">You are not a member of any organisation.</div>;
   if (!privateKey) {
     return (

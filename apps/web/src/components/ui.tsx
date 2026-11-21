@@ -15,7 +15,7 @@ export function initials(nameOrEmail: string): string {
 
 export function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   const hue = hueFor(name.toLowerCase());
-  const style: CSSProperties = { width: size, height: size, fontSize: size * 0.38, background: `hsl(${hue} 70% 93%)`, color: `hsl(${hue} 55% 32%)` };
+  const style: CSSProperties = { width: size, height: size, fontSize: size * 0.38, background: `hsl(${hue} 45% 94%)`, color: `hsl(${hue} 45% 30%)` };
   return <span className="avatar" style={style} aria-hidden>{initials(name)}</span>;
 }
 
@@ -27,7 +27,7 @@ export function Brand({ size = 28 }: { size?: number }) {
   return (
     <span className="brand">
       <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
-        <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#5b6cff" /><stop offset="1" stopColor="#8f5bff" /></linearGradient></defs>
+        <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#18181b" /><stop offset="1" stopColor="#3f3f46" /></linearGradient></defs>
         <rect width="32" height="32" rx="9" fill="url(#bg)" />
         <path d="M8 12.5l8 5.5 8-5.5M8 11h16v10.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 8 21.5z" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>

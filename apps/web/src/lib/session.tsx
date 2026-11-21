@@ -1,7 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  deriveKeys, open, openBytes, publicKeyFromPrivate, seal, unwrapSecret, type KdfParams,
+  deriveKeys, getSodium, open, openBytes, publicKeyFromPrivate, seal, unwrapSecret, type KdfParams,
 } from '@inbox-os/shared';
 import { api, loadStoredAuth, setAuth } from './api';
 
@@ -50,6 +50,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const m = await api<Me>('/auth/me', { noOrg: true });
     setMe(m);
   }, []);
+
+  // Warm up the crypto library after first paint so sign-in and decryption start instantly.
+  useEffect(() => { const t = setTimeout(() => { getSodium().catch(() => undefined); }, 150); return () => clearTimeout(t); }, []);
 
   useEffect(() => {
     const stored = loadStoredAuth();

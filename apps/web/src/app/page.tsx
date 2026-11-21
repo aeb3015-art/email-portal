@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toB64, type SealedDraft, type SealedMessage, type SealedThreadSummary } from '@inbox-os/shared';
 import { Gate } from '@/components/Gate';
 import { Composer, type ComposerInit, type Mailbox } from '@/components/Composer';
-import { MailBody } from '@/components/MailBody';
+import dynamic from 'next/dynamic';
 import { VoiceButton } from '@/components/VoiceButton';
 import { api, ApiError } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
@@ -17,6 +17,12 @@ interface Thread extends ThreadRow { summary: SealedThreadSummary }
 interface MessageRow { id: string; content_sealed: string; sent_at: string; is_outbound: boolean; attachments: { id: string; meta_sealed: string; size: number }[] }
 interface DraftRow { id: string; status: string; origin: string; category: string | null; content_sealed: string; approval_reason: string | null; send_error: string | null }
 
+// The HTML sanitiser is only needed once a message is opened.
+const MailBody = dynamic(() => import('@/components/MailBody').then((m) => m.MailBody), { ssr: false, loading: () => <div className="skel" style={{ height: 80 }} /> });
+
+// Decrypted thread lists are kept in memory per view, so switching views or returning from Settings is instant.
+const threadCache = new Map<string, Thread[]>();
+
 export default function InboxPage() {
   return <Gate><Inbox /></Gate>;
 }
@@ -26,7 +32,9 @@ function Inbox() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [filter, setFilter] = useState<{ workspaceId?: string; mailboxId?: string; label?: string; unread?: boolean }>({ label: 'inbox' });
-  const [threads, setThreads] = useState<Thread[]>([]);
+  const cacheKey = `${s.org?.id}|${JSON.stringify(filter)}`;
+  const [threads, setThreads] = useState<Thread[]>(() => threadCache.get(cacheKey) ?? []);
+  const [loading, setLoading] = useState(!threadCache.has(cacheKey));
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [composer, setComposer] = useState<ComposerInit | null>(null);
@@ -45,8 +53,10 @@ function Inbox() {
       try { return { ...t, summary: await s.open<SealedThreadSummary>(t.summary_sealed) }; }
       catch { return { ...t, summary: { subject: '(unable to decrypt)', snippet: '', participants: [] } }; }
     }));
+    threadCache.set(cacheKey, dec);
     setThreads(dec);
-  }, [filter, s]);
+    setLoading(false);
+  }, [filter, s, cacheKey]);
 
   useEffect(() => {
     Promise.all([api<{ workspaces: Workspace[] }>('/workspaces'), api<{ mailboxes: Mailbox[] }>('/mailboxes'), api<{ drafts: unknown[] }>('/inbox/approvals')])
@@ -55,12 +65,15 @@ function Inbox() {
   }, [s.org?.id]);
 
   useEffect(() => {
-    loadThreads().catch((e) => setError(e.message));
+    const cached = threadCache.get(cacheKey);
+    if (cached) { setThreads(cached); setLoading(false); } else { setThreads([]); setLoading(true); }
+    loadThreads().catch((e) => { setError(e.message); setLoading(false); });
     // Ask the server to check for new mail (a no-op when a sync worker is running), then refresh.
     const tick = () => api('/mailboxes/sync', { method: 'POST' }).catch(() => undefined).then(() => loadThreads()).catch(() => undefined);
     tick();
     const t = setInterval(tick, 60_000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadThreads]);
 
   // Search runs locally on decrypted data: the server cannot search what it cannot read.
@@ -117,13 +130,16 @@ function Inbox() {
           <div className="search"><Icon name="search" size={16} /><input placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         </div>
         {error && <div className="error" style={{ padding: 16 }}>{error}</div>}
-        {!mailboxes.length && <div className="empty"><Icon name="inbox" size={30} /><p>No mailboxes yet</p><Link className="btn primary" href="/settings?tab=mailboxes">Connect a mailbox</Link></div>}
-        {mailboxes.length > 0 && !visible.length && <div className="empty"><Icon name="approvals" size={30} /><p>Nothing here</p></div>}
+        {!mailboxes.length && !loading && <div className="empty"><Icon name="inbox" size={30} /><p>No mailboxes yet</p><Link className="btn primary" href="/settings?tab=mailboxes">Connect a mailbox</Link></div>}
+        {loading && !threads.length && Array.from({ length: 7 }, (_, i) => (
+          <div key={i} className="item"><span className="skel round" style={{ width: 32, height: 32 }} /><div className="grow"><div className="skel" style={{ width: '45%', height: 12 }} /><div className="skel" style={{ width: '80%', height: 12, marginTop: 8 }} /><div className="skel" style={{ width: '65%', height: 12, marginTop: 8 }} /></div></div>
+        ))}
+        {mailboxes.length > 0 && !loading && !visible.length && <div className="empty"><Icon name="approvals" size={30} /><p>Nothing here</p></div>}
         {visible.map((t) => {
           const who = t.summary.participants[0] ?? '?';
           return (
             <div key={t.id} className={`item ${selected === t.id ? 'active' : ''} ${t.unread_count ? 'unread' : ''}`} onClick={() => { setSelected(t.id); setComposer(null); }}>
-              <Avatar name={who} />
+              <Avatar name={who} size={32} />
               <div className="grow">
                 <div className="row nowrap">
                   <span className="grow who subj">{t.summary.participants.slice(0, 2).join(', ') || '(no participants)'}{t.message_count > 1 && <span className="muted"> · {t.message_count}</span>}</span>
@@ -175,7 +191,7 @@ function ThreadView({ threadId, mailboxes, onChanged }: { threadId: string; mail
   useEffect(() => { load().catch((e) => setError(e.message)); }, [load]);
 
   if (error) return <div className="error">{error}</div>;
-  if (!thread || !messages.length) return <div className="muted">Loading…</div>;
+  if (!thread || !messages.length) return <div><div className="skel" style={{ width: '50%', height: 22, marginBottom: 20 }} /><div className="skel" style={{ height: 180 }} /></div>;
   const mailbox = mailboxes.find((m) => m.id === thread.mailbox_id);
   const self = mailbox?.email_address.toLowerCase() ?? '';
   const last = messages[messages.length - 1]!;
