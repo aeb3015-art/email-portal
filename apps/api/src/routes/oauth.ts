@@ -35,7 +35,7 @@ oauthRouter.post('/:provider/start', requireAuth(), requireRole('owner', 'admin'
 oauthRouter.get('/:provider/callback', h(async (req, res) => {
   const provider = parse(providerParam, req.params.provider) as OAuthProvider;
   const q = parse(z.object({ code: z.string().max(4000).optional(), state: z.string().max(100), error: z.string().max(200).optional() }), req.query);
-  const back = (status: string) => res.redirect(`${config.WEB_ORIGIN}/settings/mailboxes?oauth=${encodeURIComponent(status)}`);
+  const back = (status: string) => res.redirect(`${config.WEB_ORIGIN}/settings?tab=mailboxes&oauth=${encodeURIComponent(status)}`);
   const st = await one<{ organisation_id: string; user_id: string; workspace_id: string; provider: string; code_verifier_encrypted: string }>(
     'DELETE FROM oauth_states WHERE state = $1 AND expires_at > now() RETURNING *', [q.state]);
   if (!st || st.provider !== provider) return back('invalid_state');
